@@ -1,7 +1,15 @@
 George Heisey
-Lecture 12:00 Lab 3:00
-Turning in on May 29 without forking, will fix that and update README by last date
-Turned in again on May 30 with forking and bug fixes
-User defined flags:
-Flag = 9, server -> rcopy eof
-Flag = 10, rcopy -> server respond to eof
+This is a remote file transfer program using the sliding window protocol. Currently unencrypted and unauthenticated.
+The server side forks to handle multiple clients
+Originally written as a class assignment under Professor Hugh Smith of Cal Poly, the code in the utils folder was originally written or collected by him.
+Tested on linux only
+
+Server side usage: ./server error-rate [optional port number]
+Client side usage: ./rcopy from-filename to-filename window-size buffer-size error-percent remote-machine remote-port
+
+File Organization:
+    PDU.c           - Formating and displaying application level PDUs
+    rcopy.c         - client side setup and teardown 
+    server.c        - server side setup and teardown
+    window.c        - hold the structs for managing the sliding window
+    slidingWindow.c - code for sending and recieving using sliding window protocol

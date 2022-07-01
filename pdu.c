@@ -3,9 +3,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "cpe464.h"
-#include "pollLib.h"
-#include "checksum.h"
+
+#include "utils/cpe464.h"
+#include "utils/pollLib.h"
+#include "utils/checksum.h"
 #include "pdu.h"
 
 // Formats given data into a valid pdu
@@ -59,42 +60,4 @@ void outputPDU(uint8_t * aPDU, int pduLength)
         printf("%x ", aPDU[i]);
     }
     printf("\n");
-}
-
-// sends the given packet in a stop and wait manner, polling for waitTime each sending
-// copies the response into recieving
-// returns the pdu length on a success, defined as recieving any packet with a valid checksum
-// returns -1 on an error or if nothing valid is recieved in numTimes * waitTime
-int stopAndWait(uint8_t *sending, int len, uint8_t *recieving, int recvlen, 
-                int socket, const struct sockaddr_in6 *server, uint32_t *s, int waitTime, int numTimes)
-{
-    int pollResult, pduLen = 0, resend = 0, i;
-    for(i = 0; i < numTimes; i++)
-    {
-        if(!resend && sendtoErr(socket, sending, len, 0, (struct sockaddr *)server, *s) < 0)
-        {
-            return -1;
-        }
-        else if(resend)
-        {
-            resend = 0;
-        }
-        if((pollResult = pollCall(waitTime * 1000)) > 0)
-        {
-            if((pduLen = recvfrom(pollResult, recieving, recvlen, 0, (struct sockaddr *)server, s)) < 0)
-            {
-                perror("bad recv stop and wait\n");
-                exit(-1);
-            }
-            // check checksum
-            if(in_cksum((unsigned short *)recieving, pduLen) == 0)
-            {
-                return pduLen;
-            }
-            // otherwise treat as lost data and continue
-            i--;
-            resend = 1;
-        }
-    }
-    return -1;
 }
