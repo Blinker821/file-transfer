@@ -1,0 +1,7 @@
+George Heisey
+Lecture 12:00 Lab 3:00
+Turning in on May 29 without forking, will fix that and update README by last date
+Turned in again on May 30 with forking and bug fixes
+User defined flags:
+Flag = 9, server -> rcopy eof
+Flag = 10, rcopy -> server respond to eof
