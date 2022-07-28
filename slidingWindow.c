@@ -265,19 +265,11 @@ int sendFile(int socketNum, struct sockaddr_in6 *client,  FILE *in, SlidingWindo
 		// window is open
 		if(!eof && isOpen(*window))
 		{
-			if((payloadLen = fread(payload, 1, window->bufferSize, in)) < 0)
-			{
-				perror("server read\n");
-				exit(-1);
-			}
-			else if(payloadLen < window->bufferSize)
+			if((pduLen = pduFromFile(pdu, in, window, &seqNumber)) - 7 < window->bufferSize)
 			{
 				// EOF CASE
 				eof = 1;
 			}
-			pduLen = createPDU(pdu, seqNumber, 3, payload, payloadLen);
-			addPDU(window, seqNumber++, payload, payloadLen);
-			moveCurrent(window, seqNumber);
 			waitTime = 0; 
 			numTimes = 1;
 		}
@@ -286,8 +278,6 @@ int sendFile(int socketNum, struct sockaddr_in6 *client,  FILE *in, SlidingWindo
 		{
 			payloadLen = getPDU(window, window->lower, payload);
 			pduLen = createPDU(pdu, window->lower, 3, payload, payloadLen);
-			waitTime = 1;
-			numTimes = 10;
 			// check for a response before resending data
 			if(pollCall(1000) > 0)
 			{
@@ -295,6 +285,8 @@ int sendFile(int socketNum, struct sockaddr_in6 *client,  FILE *in, SlidingWindo
 				payloadLen = recvfrom(socketNum, response, MAX_PDU_SIZE, 0, (struct sockaddr *)client, &tmp);
 				if(in_cksum((unsigned short *)response, payloadLen) != 0){fullFlag = 0;}
 			}
+			waitTime = 1;
+			numTimes = 10;
 		}
 		else
 		{
@@ -356,4 +348,20 @@ int sendFile(int socketNum, struct sockaddr_in6 *client,  FILE *in, SlidingWindo
 			exit(-1);
 		}
 	}
+}
+
+// reads a buffer of data from the input file and forms it into a data pdu
+int pduFromFile(uint8_t *pdu, FILE *in, SlidingWindow *window, uint32_t *seqNumber)
+{
+	uint8_t payload[MAX_PDU_SIZE];
+	int payloadLen, pduLen;
+	if((payloadLen = fread(payload, 1, window->bufferSize, in)) < 0)
+	{
+		perror("server read\n");
+		exit(-1);
+	}
+	pduLen = createPDU(pdu, *seqNumber, 3, payload, payloadLen);
+	addPDU(window, (*seqNumber)++, payload, payloadLen);
+	moveCurrent(window, *seqNumber);
+	return pduLen;
 }
