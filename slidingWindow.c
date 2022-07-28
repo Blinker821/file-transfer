@@ -24,12 +24,14 @@
 
 // sends the given packet in a stop and wait manner, polling for waitTime each sending
 // copies the response into recieving
+// resend indicates whether a packet is sent the first run or not, 0 for send anything else for no send
 // returns the pdu length on a success, defined as recieving any packet with a valid checksum
 // returns -1 on an error or if nothing valid is recieved in numTimes * waitTime
 int stopAndWait(uint8_t *sending, int len, uint8_t *recieving, int recvlen, 
-                int socket, const struct sockaddr_in6 *server, uint32_t *s, int waitTime, int numTimes)
+                int socket, const struct sockaddr_in6 *server, uint32_t *s, 
+				int waitTime, int numTimes, int resend)
 {
-    int pollResult, pduLen = 0, resend = 0, i;
+    int pollResult, pduLen = 0, i;
     for(i = 0; i < numTimes; i++)
     {
         if(!resend && sendtoErr(socket, sending, len, 0, (struct sockaddr *)server, *s) < 0)
@@ -65,7 +67,7 @@ int stopAndWait(uint8_t *sending, int len, uint8_t *recieving, int recvlen,
 int checkFile(int socketNum, struct sockaddr_in6 *server, int argc, char **argv)
 {
 	uint8_t pdu[MAX_PDU_SIZE], response[MAX_PDU_SIZE], payload[110];
-	int windowSize, bufferSize, nameLen, pduLen, rr = 0, i, resend = 0, pollRes;
+	int windowSize, bufferSize, nameLen, pduLen, rr = 0;
 	uint32_t serverLen = sizeof(struct sockaddr_in6);
 	struct sockaddr_in6 server2 = *server;
 	// Format the payload
@@ -85,37 +87,14 @@ int checkFile(int socketNum, struct sockaddr_in6 *server, int argc, char **argv)
 	pduLen = createPDU(pdu, 0, 7, payload, 8 + nameLen);
 	// wait for a response up to 10 times
 	// REPLACE with modified stopAndWait
-	for(i = 0; i < 11; i++)
-	{
-		if(i == 10){exit(-1);}
-		if(resend){resend = 0;}
-		else
-		{
-			pduLen = sendtoErr(socketNum, pdu, pduLen, 0, (struct sockaddr *)server, serverLen);
-		}
-		if((pollRes = pollCall(1000)) > 0)
-		{
-			pduLen = recvfrom(socketNum, response, MAX_PDU_SIZE, 0, (struct sockaddr *)&server2, &serverLen);
-			if(in_cksum((unsigned short *)response, pduLen) == 0)
-			{
-				*server = server2;
-				break;
-			}
-			else
-			{
-				i--;
-				resend = 1;
-			}
-			
-		}
-	}
+	stopAndWait(pdu, pduLen, response, MAX_PDU_SIZE, socketNum, &server2, &serverLen, 1, 10, 1);
+
 	// checks for correct flag and whether the server was successful
 	if(response[6] != 8 && response[8] == 0)
 	{
 		return -1;
 	}
 	pduLen = createPDU(pdu, 1, 5, (uint8_t *)&rr, 4);
-
 
 	sendtoErr(socketNum, pdu, pduLen, 0, (struct sockaddr *)server, serverLen);
 
@@ -132,7 +111,7 @@ int recvFile(int socketNum, struct sockaddr_in6 *server, FILE *out, SlidingWindo
 	// until EOF recieved
 	while(1)
 	{
-		if(!srejSent && (pduLen = stopAndWait(response, pduLen, pdu, MAX_PDU_SIZE, socketNum, server, &x, waitTime, numTimes)) < 0)
+		if(!srejSent && (pduLen = stopAndWait(response, pduLen, pdu, MAX_PDU_SIZE, socketNum, server, &x, waitTime, numTimes, 0)) < 0)
 		{
 			perror("client recv\n");
 			exit(-1);
@@ -265,7 +244,7 @@ FILE *setupClient(int *socketNum, struct sockaddr_in6 *client, SlidingWindow *wi
 	windowSize = ntohl(*((uint32_t *)&buffer[7]));
 	bufferSize = ntohl(*((uint32_t *)&buffer[11]));
 	*window = createWindow(windowSize, bufferSize);
-	if((pdulen = stopAndWait(response, pdulen, buffer, MAX_PDU_SIZE, newSocket, client, &serverAddrLen, 1, 10)) < 0)
+	if((pdulen = stopAndWait(response, pdulen, buffer, MAX_PDU_SIZE, newSocket, client, &serverAddrLen, 1, 10, 0)) < 0)
 	{
 		perror("client error\n");
 		exit(-1);
@@ -324,7 +303,7 @@ int sendFile(int socketNum, struct sockaddr_in6 *client,  FILE *in, SlidingWindo
 			numTimes = 10;
 		}
 		// handles response from client
-		if(fullFlag || (pduLen = stopAndWait(pdu, pduLen, response, MAX_PDU_SIZE, socketNum, client, &tmp, waitTime, numTimes)) != -1)
+		if(fullFlag || (pduLen = stopAndWait(pdu, pduLen, response, MAX_PDU_SIZE, socketNum, client, &tmp, waitTime, numTimes, 0)) != -1)
 		{
 			fullFlag = 0;
 			responseVal = ntohl(((uint32_t *)&response[7])[0]);
@@ -346,7 +325,7 @@ int sendFile(int socketNum, struct sockaddr_in6 *client,  FILE *in, SlidingWindo
 					// resend data selectively until RRs match current
 					payloadLen = getPDU(window, srej, payload);
 					pduLen = createPDU(pdu, srej, 3, payload, payloadLen);
-					if((pduLen = stopAndWait(pdu, pduLen, response, MAX_PDU_SIZE, socketNum, client, &tmp, 1, 10)) < 0)
+					if((pduLen = stopAndWait(pdu, pduLen, response, MAX_PDU_SIZE, socketNum, client, &tmp, 1, 10, 0)) < 0)
 					{
 						perror("server srej response\n");
 						exit(-1);
